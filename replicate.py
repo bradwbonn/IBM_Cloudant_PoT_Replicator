@@ -58,6 +58,34 @@ def get_db_list(sourceReference):
                 listOfDatabases.append(DBURL)
     return(listOfDatabases)
 
+# Get replicator doc get with auth config
+def getRepDoc(docID):
+    URI = config['baseURI'] + "/_replicator/" + docID
+    response = requests.get(
+        URI,
+        headers = config['authheader']
+    )
+    return response.json()
+
+def getActiveTask(repID):
+    # Get active tasks JSON
+    response = requests.get(
+        tasksURI,
+        headers = config['authheader']
+    )
+    if len(response.json()) > 0:
+        for task in response.json():
+            if task['type'] == 'replication':
+                if task['doc_id'] == repID:
+                    return task['changes_pending']
+                else:
+                    next()
+            else:
+                next()
+        return "NOT STARTED"
+    else:
+        return "NOT STARTED"
+
 # Function to monitor status of replication tasks and notify user upon completion
 def monitor_replication(databaseList):
     # For now, check to see if any replications are active. Repeat until they're no longer active.
@@ -76,30 +104,70 @@ def monitor_replication(databaseList):
     replicationUnderway = True
     startTime = time.time()
     endTime = time.time()
+    notCompleted = True
+    while (notCompleted):
+        statuses = dict()
+        # Loop through all IDs of rep docs created
+        for docID in config['replicationIds']:
+            # get "_replication_state" for this doc
+            # If "triggered":
+            if (getRepDoc(docID)['_replication_state'] == "triggered"):
+                # Poll _active_tasks for corresponding doc
+                taskState = getActiveTask(docID)
+                # if doc doesn't exist, or "changes_pending" == "None":
+                if (taskState == "NOT STARTED" or taskState == "None"):
+                    # put key/value of replication name, "Standby" into statusdict
+                    statuses[docID] = "Standby"
+                else:
+                    # put key/value of replication name, "Running" into statusdict
+                    statuses[docID] = "Running"
+            else:
+                if (getRepDoc(docID)['_replication_state'] == "completed"):
+                    # put key/value of replication name, "Complete" into statusdict
+                    statuses[docID] = "Complete"
+                else:
+                    # put key/value of replication name, "Error" into statusdict
+                    statuses[docID] = "Error"
+        # Print a table of the replication statuses
+        notCompleted = False
+        print '------------------'
+        for key in statuses:
+            print('Task: {0} Status: {1}'.format(key,statuses[key]))
+            if statuses[key] == "Standby" or statuses[key] == "Running":
+                notCompleted = True
+            else:
+                next()
+        print '------------------'
+        # Print a dot each second for 10 seconds
+        for x in range (1,10):
+            print '.'
+            time.sleep(1)
 
-    # Sit on active tasks until they are completed    
-    while (replicationUnderway & ((endTime - startTime) < timeout)):
-        # Get active tasks JSON
-        response = requests.get(
-            tasksURI,
-            headers = config['authheader']
-        )
-        # Check all results for changes pending
-        taskJSON = response.json()
-        completeTest = True
-        for doc in taskJSON:
-            if (doc['type'] == "replication"):
-                completeTest == False
-        if completeTest == True:
-            replicationUnderway = False
-        else:
-            # Incomplete. Update timer and error if timeout achieved.
-            # Make a spinny visual while waiting to query
-            spinny()
-            endTime = time.time()
-            if ((endTime - startTime) < timeout):
-                print "ERROR: Replication task has taken longer than 15 minutes."
-                print "Check with your instructor for assistance."
+    # Sit on active tasks until they are completed
+    # CODE BELOW HERE BAD
+    #while (replicationUnderway & ((endTime - startTime) < timeout)):
+    #    # Get active tasks JSON
+    #    response = requests.get(
+    #        tasksURI,
+    #        headers = config['authheader']
+    #    )
+    #    # Check all results for changes pending
+    #    taskJSON = response.json()
+    #    completeTest = True
+    #    for doc in taskJSON:
+    #        if (doc['type'] == "replication"):
+    #            completeTest == False
+    #    if completeTest == True:
+    #        replicationUnderway = False
+    #    else:
+    #        # Incomplete. Update timer and error if timeout achieved.
+    #        # Make a spinny visual while waiting to query
+    #        spinny()
+    #        endTime = time.time()
+    #        if ((endTime - startTime) < timeout):
+    #            print "ERROR: Replication task has taken longer than 15 minutes."
+    #            print "Check with your instructor for assistance."
+    # CODE ABOVE HERE BAD
     
 def spinny():
     print "replicating databases...\\",
