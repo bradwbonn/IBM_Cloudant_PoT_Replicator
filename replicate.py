@@ -44,21 +44,19 @@ config = dict(
     cloudant_pass = '',
     jsonheader = {"Content-Type":"application/json"},
     sourceListURL = "https://bradwbonn.cloudant.com/potreplicator/sources",
-    databaselist = []
+    databaselist = [],
+    replicationIds = []
 )
 
 # Use public sources document in order to get the appropriate list of databases to replicate
 # Currently, this just gets all DBs for all PoTs and returns them as an array.
 def get_db_list(sourceReference):
+    listOfDatabases = []
     for potname in sourceReference['PoTs']:
-        if potname > 0:
-            for DBURL in sourceReference[potname]:
+        if sourceReference['PoTs'][potname] > 0:
+            for DBURL in sourceReference['PoTs'][potname]:
                 listOfDatabases.append(DBURL)
     return(listOfDatabases)
-
-# Future expansion: obtain a list of all PoTs from the sources document
-def get_pot_list():
-    return ()
 
 # Function to monitor status of replication tasks and notify user upon completion
 def monitor_replication(databaseList):
@@ -68,8 +66,8 @@ def monitor_replication(databaseList):
     
     # Populate an array with the db names for finding by task _id
     dbarray = []
-    for dbURL in databaseList:
-        m = re.search('\/(.+?)$', URL)
+    for URL in databaseList:
+        m = re.search('.*\/(.+?)$', URL)
         if m:
             databasename = m.group(1)
             dbarray.insert(databasename)
@@ -78,6 +76,8 @@ def monitor_replication(databaseList):
     replicationUnderway = True
     startTime = time.time()
     endTime = time.time()
+
+    # Sit on active tasks until they are completed    
     while (replicationUnderway & ((endTime - startTime) < timeout)):
         # Get active tasks JSON
         response = requests.get(
@@ -88,8 +88,8 @@ def monitor_replication(databaseList):
         taskJSON = response.json()
         completeTest = True
         for doc in taskJSON:
-            if ((doc.type == "replication") & (doc.changes_pending > 0)):
-                completeTest = False
+            if (doc['type'] == "replication"):
+                completeTest == False
         if completeTest == True:
             replicationUnderway = False
         else:
@@ -98,7 +98,7 @@ def monitor_replication(databaseList):
             spinny()
             endTime = time.time()
             if ((endTime - startTime) < timeout):
-                print "ERROR: Replication has taken longer than 15 minutes."
+                print "ERROR: Replication task has taken longer than 15 minutes."
                 print "Check with your instructor for assistance."
     
 def spinny():
@@ -150,23 +150,26 @@ def test_auth():
 
 # Create a replication document JSON using the source URL
 def make_replication_doc(URL):
-    m = re.search('\/(.+?)$', URL)
+    m = re.search('.*\/(.+?)$', URL)
     if m:
         databasename = m.group(1)
+
     tempdoc = dict(
         source = URL,
+        name = URL,
         target = "https://" + config['cloudant_user'] + ":" + config['cloudant_pass'] + "@" + config['cloudant_user'] + ".cloudant.com/" + databasename,
         continuous = False,
-        _id = databasename
+        create_target = True,
     )
     repJSON = json.dumps(tempdoc)
     return(repJSON)
 
 # Insert a replication document into the _replicator database for each entry in the passed list
 def start_replication(databaseList):
+    successStatus = False
     for databaseURL in databaseList:
         thisJSON = make_replication_doc(databaseURL)
-        response = requests.put(
+        response = requests.post(
             config['replicatorURL'],
             headers = config['authheader'],
             data = thisJSON
@@ -176,6 +179,7 @@ def start_replication(databaseList):
             print response.json()
         else:
             successStatus = True
+            config['replicationIds'].insert(response.json()['id'])
     return (successStatus)
 
 # Main code begins here
