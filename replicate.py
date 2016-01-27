@@ -31,6 +31,8 @@ import json
 import re
 import time
 import sys
+import logging
+import getpass
 
 # Configuration values
 config = dict(
@@ -235,10 +237,18 @@ def start_replication(databaseList):
     return (successStatus)
 
 # Main code begins here
+
+# Setup logging
+try:
+    logging.basicConfig(filename='replicator.log', level=30)
+    logging.captureWarnings(True)
+except Exception:
+    sys.exit("Can't open local log file, exiting.")
+
 print "This script will import the example databases into your account."
 print "In order to use it, please ensure you're connected to the internet."
 config['cloudant_user'] = raw_input("Enter your Cloudant account name > ")
-config['cloudant_pass'] = raw_input("Enter your Cloudant password > ")
+config['cloudant_pass'] = getpass.getpass()
 config['baseURI'] = "https://" + config['cloudant_user'] + ".cloudant.com"
 
 # Test auth by opening a cookie session, if not good try again
