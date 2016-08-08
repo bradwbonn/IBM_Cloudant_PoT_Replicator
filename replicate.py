@@ -33,6 +33,7 @@ import time
 import sys
 import logging
 import getpass
+import urllib
 
 # Configuration values
 config = dict(
@@ -248,7 +249,7 @@ except Exception:
 print "This script will import the example databases into your account."
 print "In order to use it, please ensure you're connected to the internet."
 config['cloudant_user'] = raw_input("Enter your Cloudant account name > ")
-config['cloudant_pass'] = getpass.getpass()
+config['cloudant_pass'] = urllib.quote_plus(getpass.getpass())
 config['baseURI'] = "https://" + config['cloudant_user'] + ".cloudant.com"
 
 # Test auth by opening a cookie session, if not good try again
