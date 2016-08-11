@@ -182,8 +182,8 @@ def test_auth():
     )
     if (response.status_code not in (200,201,202)):
         print response.status_code
-        print response.raise_for_status()
-        print "Sorry, login credentials invalid, please try again."
+        # print response.raise_for_status()
+        print " Sorry, login credentials invalid, please try again."
         return(False)
     config['mycookie'] = response.headers['set-cookie']
     config['authheader'] = {"Content-Type":"application/json","Cookie":config['mycookie']}
@@ -199,7 +199,7 @@ def test_auth():
             headers = config['authheader']
         )
         if (response.status_code not in (200,201,202)):
-            print "Sorry, cannot create _replicator database. Check your login account's permissions. API keys cannot be used."
+            print " Sorry, cannot create _replicator database. Check your login account's permissions. API keys cannot be used."
             return(False)
     return(True)
 
@@ -230,7 +230,7 @@ def start_replication(databaseList):
             data = thisJSON
         )
         if (response.status_code not in (200,201,202)):
-            print "Error: Couldn't insert replication document for " + databaseURL
+            print " Error: Couldn't insert replication document for " + databaseURL
             print response.json()
         else:
             successStatus = True
@@ -238,47 +238,54 @@ def start_replication(databaseList):
     return (successStatus)
 
 # Main code begins here
+def main():
+    
+    # Setup logging
+    try:
+        logging.basicConfig(filename='replicator.log', level=30)
+        logging.captureWarnings(True)
+    except Exception:
+        sys.exit("Can't open local log file, exiting.")
 
-# Setup logging
-try:
-    logging.basicConfig(filename='replicator.log', level=30)
-    logging.captureWarnings(True)
-except Exception:
-    sys.exit("Can't open local log file, exiting.")
+    print " This script will import the example databases into your account."
+    print " In order to use it, please ensure you're connected to the internet."
+    print " Note: Passwords with '@' symbols are not presently supported for replication since they"
+    print "       cannot be incorporated into the source or destination database URLs."
+    config['cloudant_user'] = raw_input("Enter your Cloudant account name > ")
+    config['cloudant_pass'] = urllib.quote_plus(getpass.getpass())
+    config['baseURI'] = "https://" + config['cloudant_user'] + ".cloudant.com"
 
-print "This script will import the example databases into your account."
-print "In order to use it, please ensure you're connected to the internet."
-config['cloudant_user'] = raw_input("Enter your Cloudant account name > ")
-config['cloudant_pass'] = urllib.quote_plus(getpass.getpass())
-config['baseURI'] = "https://" + config['cloudant_user'] + ".cloudant.com"
+    # Test auth by opening a cookie session, if not good try again
+    if test_auth():
+        print " Credentials valid"
+    else:
+        exit()
 
-# Test auth by opening a cookie session, if not good try again
-if test_auth():
-    print "Credentials valid"
-else:
-    exit()
+    # Import the set of databases to replicate from the shared database
+    response = requests.get(
+        config['sourceListURL'],
+        headers = config['jsonheader']
+    )
+    sourceReference = response.json()
+    # Obtain the array of databases to replicate from resulting JSON
+    config['databaseList'] = get_db_list(sourceReference)
 
-# Import the set of databases to replicate from the shared database
-response = requests.get(
-    config['sourceListURL'],
-    headers = config['jsonheader']
-)
-sourceReference = response.json()
-# Obtain the array of databases to replicate from resulting JSON
-config['databaseList'] = get_db_list(sourceReference)
+    # Begin replication process
+    if (start_replication(config['databaseList'])):
+        print " Replication process initiated. Databases will appear in the Cloudant dashboard once"
+        print " the process has completed."
+        # Monitoring temporarily disabled until "hangs" can be diagnosed.
+        # monitor_replication(config['databaseList'])
+    else:
+        print " ERROR: No replication tasks started."
+        print " Please check with your instructor for assistance."
+        exit()
 
-# Begin replication process
-if (start_replication(config['databaseList'])):
-    print "Replication process initiated..."
-    monitor_replication(config['databaseList'])
-else:
-    print "ERROR: No replication tasks started."
-    print "Please check with your instructor for assistance."
-    exit()
+    # Remove cookie when finished
+    requests.delete(
+        config['sessionURI'],
+        headers = config['authheader']
+    )
 
-# Remove cookie when finished
-requests.delete(
-    config['sessionURI'],
-    headers = config['authheader']
-)
-
+if __name__ == "__main__":
+    main()
